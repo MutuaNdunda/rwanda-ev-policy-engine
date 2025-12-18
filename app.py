@@ -807,16 +807,26 @@ elif selected_tab == "Overview":
 
 # Footer
 st.markdown("---")
-st.markdown("""
-**Evidence Base:**  
-Built from a structured literature review on EV policy, grid impact, and charging infrastructure.
 
-**Data Status:**  
-Simulated data with API-ready support for live agency integration.
+compact_footer = """
+<div style="text-align: center; color: #888; font-size: 0.85em; padding: 0.8em 0; line-height: 1.4;">
+    <strong>Evidence Base:</strong> Structured literature review... 
+    (<a href="https://drive.google.com/file/d/119mnfhIQhNBXDodi6APYXlLK_oZXNVwb/view?usp=sharing" 
+        style="color: #555; text-decoration: none;">full review PDF</a>) 
+    • <strong>Data:</strong> Simulated (API-ready...) 
+    • <strong>Methodology:</strong> 
+      <a href="https://drive.google.com/file/d/1T8by63SyFyfnQiNiMGrr-GYpT1fd5R4n/view?usp=sharing" 
+         style="color: #555; text-decoration: none;">Detailed methodology PDF</a> 
+    • <strong>Version:</strong> 3.1 
+    • <strong>Updated:</strong> December 2025 
+    • <strong>Contact:</strong> 
+      <a href="mailto:mutua@ndunda.com" style="color: #555; text-decoration: none;">mutua@ndunda.com</a>
+    <style>
+        div a { color: #555 !important; }
+        div a:hover { text-decoration: underline !important; color: #0066cc !important; }
+    </style>
+</div>
+"""
 
-**Version:** 3.1  
-**Last Updated:** December 2025  
-**Contact:** mutua@ndunda.com
-""")
-
+st.markdown(compact_footer, unsafe_allow_html=True)
 
