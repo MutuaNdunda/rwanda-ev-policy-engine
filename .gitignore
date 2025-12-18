@@ -116,3 +116,10 @@ dmypy.json
 *~
 *.swp
 *.swo
+
+# IDE
+.idea/
+
+# Python cache
+__pycache__/
+
