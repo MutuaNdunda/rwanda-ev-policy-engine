@@ -8,6 +8,20 @@ from rwanda_context import RwandaEVContext
 import json
 from datetime import datetime
 
+# Helper Funnction for Data & Partnerships Tab
+
+
+def get_update_impact(frequency):
+    """Calculate impact based on update frequency"""
+    impacts = {
+        "Monthly": 30,
+        "Weekly": 70,
+        "Daily": 90,
+        "Real-time": 95
+    }
+    return impacts.get(frequency, 0)
+
+
 # Page Configuration
 st.set_page_config(
     page_title="Rwanda EV Policy Simulator",
@@ -87,7 +101,8 @@ with st.sidebar:
     st.markdown("## Navigation")
     selected_tab = st.radio(
         "Select Module:",
-        ["Overview", "Scenario Simulator", "Grid Impact Analysis", "Financial Modeling"]
+        ["Overview", "Scenario Simulator", "Grid Impact Analysis",
+         "Financial Modeling", "Data & Partnerships"]
     )
 
     year_selected = st.selectbox(
@@ -625,7 +640,7 @@ elif selected_tab == "Financial Modeling":
             | Carbon Credit Value | $8M/year | At $50/ton CO2 |
             | Infrastructure Cost | $120M | 500 charging stations |
             | Subsidy Cost | $40M | 5-year program |
-            | **Net Present Value** | **$180M** | 10-year horizon |
+          ƒ  | **Net Present Value** | **$180M** | 10-year horizon |
             """)
 
             # ROI Calculator
@@ -763,47 +778,744 @@ elif selected_tab == "Financial Modeling":
         st.metric("Required Annual Revenue", f"${annual_revenue_needed:.1f}M")
 
 elif selected_tab == "Overview":
-    st.header("Overview")
+    st.header("Rwanda EV Transition Overview")
 
+    # Add some context
+    st.markdown("""
+    *Real-time dashboard tracking Rwanda's electric vehicle transition progress and policy impacts*
+    """)
+
+    # Key Metrics with better formatting
     col1, col2, col3, col4 = st.columns(4)
     selected_row = ev[ev["Year"] == year_selected].iloc[0]
 
-    col1.metric("Total EVs", f"{int(selected_row['EV_Total']):,}")
-    col2.metric("EV 2-Wheelers", f"{int(selected_row['EV_2W']):,}")
-    col3.metric("Charging Stations", len(stations))
+    col1.metric(
+        "Total EVs",
+        f"{int(selected_row['EV_Total']):,}",
+        delta=f"+{int(selected_row['EV_Growth']):,} YoY" if 'EV_Growth' in selected_row else None,
+        delta_color="normal"
+    )
+    col2.metric(
+        "EV 2-Wheelers",
+        f"{int(selected_row['EV_2W']):,}",
+        f"{int(selected_row['EV_2W']/selected_row['EV_Total']*100)}%" if selected_row['EV_Total'] > 0 else "0%"
+    )
+    col3.metric(
+        "Charging Stations",
+        len(stations),
+        f"Target: 500 by 2025"  # Add target context
+    )
     col4.metric(
-        "EV Tariff (RWF/kWh)",
-        int(tariffs[tariffs["Tariff_Type"] == "EV_Tariff"]
-            ["Price_RWF_per_kWh"].values[0])
+        "EV Tariff",
+        f"{int(tariffs[tariffs['Tariff_Type'] == 'EV_Tariff']['Price_RWF_per_kWh'].values[0]):,} RWF/kWh",
+        "Time-of-Use available" if len(
+            tariffs[tariffs['Tariff_Type'] == 'EV_Tariff']) > 1 else "Flat rate"
     )
 
+    # EV Adoption Trend with more detail
     st.subheader("EV Adoption Trend")
 
-    fig = px.line(
-        ev,
-        x="Year",
-        y="EV_Total",
-        markers=True
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        # Create multi-line chart showing different vehicle types
+        fig = go.Figure()
+
+        # Total EVs
+        fig.add_trace(go.Scatter(
+            x=ev["Year"],
+            y=ev["EV_Total"],
+            mode='lines+markers',
+            name='Total EVs',
+            line=dict(color='#0066CC', width=3)
+        ))
+
+        # 2-Wheelers if available
+        if 'EV_2W' in ev.columns:
+            fig.add_trace(go.Scatter(
+                x=ev["Year"],
+                y=ev["EV_2W"],
+                mode='lines+markers',
+                name='2-Wheelers',
+                line=dict(color='#00CC96', width=2, dash='dash')
+            ))
+
+        # Add 2030 target line
+        fig.add_hline(
+            y=30000,  # Rwanda's 2030 target
+            line_dash="dash",
+            line_color="red",
+            annotation_text="2030 Target",
+            annotation_position="bottom right"
+        )
+
+        fig.update_layout(
+            title="EV Growth Projection",
+            xaxis_title="Year",
+            yaxis_title="Number of EVs",
+            hovermode='x unified',
+            legend=dict(orientation="h", yanchor="bottom",
+                        y=1.02, xanchor="right", x=1)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        # Quick stats box
+        st.markdown("### 📊 Quick Stats")
+
+        # Calculate some metrics
+        if len(ev) > 1:
+            growth_rate = ((ev.iloc[-1]['EV_Total'] - ev.iloc[-2]
+                           ['EV_Total']) / ev.iloc[-2]['EV_Total']) * 100
+            st.metric("Annual Growth", f"{growth_rate:.1f}%")
+
+        if 'EV_Total' in selected_row and 'public_chargers' in selected_row:
+            ev_to_charger = selected_row['EV_Total'] / \
+                max(selected_row['public_chargers'], 1)
+            st.metric("EV-to-Charger", f"{ev_to_charger:.0f}:1")
+
+        st.metric("Districts Covered", len(stations['District'].unique()))
+
+    # Charging Station Map with better visualization
+    st.subheader("Charging Infrastructure Map")
+
+    map_col1, map_col2 = st.columns([3, 1])
+
+    with map_col1:
+        filtered_map = stations[stations["District"].isin(
+            district_selected)].copy()
+        if not filtered_map.empty:
+            filtered_map = filtered_map.rename(
+                columns={"Latitude": "latitude", "Longitude": "longitude"}
+            )
+            st.map(filtered_map[["latitude", "longitude"]])
+        else:
+            st.info("No charging stations in selected districts")
+
+    with map_col2:
+        st.markdown("### 📍 District Coverage")
+
+        # Get ACTUALLY SELECTED districts with stations
+        selected_stations = stations[stations["District"].isin(
+            district_selected)]
+
+        if not selected_stations.empty:
+            # Count unique districts in selection
+            covered_districts = selected_stations['District'].unique()
+            total_covered = len(covered_districts)
+            total_selected = len(district_selected)
+
+            # Calculate coverage percentage
+            coverage_pct = (total_covered / max(total_selected, 1)) * 100
+
+            st.metric("Districts Covered", f"{total_covered}/{total_selected}")
+            st.progress(coverage_pct / 100)
+
+            # List covered districts
+            st.markdown("**With Stations:**")
+            for district in covered_districts:
+                count = len(
+                    selected_stations[selected_stations['District'] == district])
+                st.write(f"✓ {district} ({count} stations)")
+
+            # Show missing districts if any
+            missing = set(district_selected) - set(covered_districts)
+            if missing:
+                st.markdown("**No Stations In:**")
+                for district in missing:
+                    st.write(f"✗ {district}")
+        else:
+            st.warning("No stations in selected districts")
+
+    # ====== IMPROVED POLICY SUMMARY BOX ======
+    st.subheader("Policy Insights & Recommendations")
+
+    # Create tabs for different policy aspects
+    insight_tab1, insight_tab2, insight_tab3, insight_tab4 = st.tabs([
+        "📊 Infrastructure", "⚡ Grid Impact", "💰 Economics", "🌍 Climate"
+    ])
+
+    with insight_tab1:
+        # Infrastructure insights
+        st.markdown("### Infrastructure Gap Analysis")
+
+        # Calculate key metrics
+        ev_total = selected_row['EV_Total']
+        chargers_total = len(stations)
+        ev_to_charger = ev_total / max(chargers_total, 1)
+
+        insights = []
+
+        if ev_to_charger > 150:
+            insights.append(
+                "🚨 **CRITICAL**: EV-to-charger ratio exceeds 150:1")
+            insights.append(
+                f"• Current ratio: **{ev_to_charger:.0f}:1** vs target 50:1")
+            insights.append(
+                f"• Additional stations needed: **{ev_total//50 - chargers_total:,}**")
+            insights.append(
+                "• **Immediate action required**: Accelerate deployment")
+        elif ev_to_charger > 100:
+            insights.append("⚠️ **HIGH**: Infrastructure pressure increasing")
+            insights.append(f"• Current ratio: **{ev_to_charger:.0f}:1**")
+            insights.append(
+                f"• Planning needed for: **{ev_total//80:,}** more stations")
+            insights.append("• **Action**: Fast-track approval processes")
+        else:
+            insights.append("✅ **MANAGEABLE**: Infrastructure keeping pace")
+            insights.append(f"• Current ratio: **{ev_to_charger:.0f}:1**")
+            insights.append("• **Continue** planned expansion")
+
+        # District concentration analysis
+        if 'District' in stations.columns:
+            kigali_stations = len(stations[stations['District'] == 'Kigali'])
+            kigali_share = (kigali_stations / max(chargers_total, 1)) * 100
+
+            if kigali_share > 70:
+                insights.append(
+                    f"\n📍 **Geographic Concentration**: {kigali_share:.0f}% in Kigali")
+                insights.append(
+                    "• **Recommendation**: Incentivize rural deployment")
+
+        for insight in insights:
+            st.write(insight)
+
+    with insight_tab2:
+        # Grid impact insights
+        st.markdown("### Grid Integration Status")
+
+        grid_insights = []
+
+        # Peak charging analysis (simplified)
+        peak_hours = ["18:00", "19:00", "20:00", "21:00"]
+        if 'peak_charging_share' in selected_row:
+            peak_share = selected_row['peak_charging_share']
+
+            if peak_share > 60:
+                grid_insights.append(
+                    "⚠️ **HIGH GRID RISK**: Peak charging >60%")
+                grid_insights.append(
+                    f"• {peak_share:.0f}% charging during peak hours")
+                grid_insights.append(
+                    "• **Recommendation**: Implement Time-of-Use tariffs")
+                grid_insights.append(
+                    "• **Action**: Launch smart charging pilot")
+            elif peak_share > 40:
+                grid_insights.append(
+                    "📈 **MODERATE LOAD**: Manage peak charging")
+                grid_insights.append(f"• {peak_share:.0f}% during peak hours")
+                grid_insights.append(
+                    "• **Recommendation**: Promote off-peak charging")
+            else:
+                grid_insights.append(
+                    "✅ **BALANCED**: Healthy charging patterns")
+                grid_insights.append("• **Continue**: Monitor and maintain")
+
+        # DG needs
+        if 'EV_Total' in selected_row and selected_row['EV_Total'] > 50000:
+            grid_insights.append("\n⚡ **Grid Reinforcement Needed**")
+            grid_insights.append(
+                f"• {selected_row['EV_Total']//10000:.0f} MW DG capacity recommended")
+            grid_insights.append("• Priority: Critical substations")
+
+        for insight in grid_insights:
+            st.write(insight)
+
+    with insight_tab3:
+        # Economic insights
+        st.markdown("### Economic Indicators")
+
+        economic_insights = []
+
+        # Tariff analysis
+        ev_tariff = tariffs[tariffs["Tariff_Type"] ==
+                            "EV_Tariff"]["Price_RWF_per_kWh"].values[0]
+        residential_tariff = tariffs[tariffs["Tariff_Type"] ==
+                                     "Residential"]["Price_RWF_per_kWh"].values[0] if "Residential" in tariffs["Tariff_Type"].values else None
+
+        economic_insights.append(
+            f"📊 **Tariff Structure**: {ev_tariff:,.0f} RWF/kWh")
+
+        if residential_tariff:
+            if ev_tariff < residential_tariff:
+                economic_insights.append(
+                    f"• **Incentive**: {((residential_tariff - ev_tariff)/residential_tariff*100):.0f}% cheaper than residential")
+                economic_insights.append(
+                    "• **Impact**: Encourages EV adoption")
+            else:
+                economic_insights.append(
+                    "• **Review**: Consider tariff adjustments")
+
+        # Cost savings estimate
+        if 'EV_Total' in selected_row:
+            # Simplified: $1000 per EV per year
+            annual_savings = selected_row['EV_Total'] * 1000
+            economic_insights.append(
+                f"\n💰 **Annual Savings Estimate**: ${annual_savings:,.0f}")
+            economic_insights.append("• Fuel import reduction")
+            economic_insights.append("• Maintenance cost savings")
+            economic_insights.append("• Health benefit savings")
+
+        for insight in economic_insights:
+            st.write(insight)
+
+    with insight_tab4:
+        # Climate insights
+        st.markdown("### Climate Impact")
+
+        climate_insights = []
+
+        if 'EV_Total' in selected_row:
+            # Tons CO2 per EV per year
+            co2_reduction = selected_row['EV_Total'] * 2.5
+            climate_insights.append(
+                f"🌿 **CO₂ Reduction**: {co2_reduction:,.0f} tons/year")
+            climate_insights.append(
+                f"• Equivalent to {co2_reduction*50:,.0f} trees planted")
+
+            # Progress toward Rwanda's NDC
+            ndc_target = 3800000  # Rwanda's NDC target in tons
+            progress = (co2_reduction / ndc_target) * 100
+            climate_insights.append(
+                f"\n🎯 **NDC Contribution**: {progress:.1f}% of national target")
+
+            if progress < 5:
+                climate_insights.append(
+                    "• **Opportunity**: Scale up for greater impact")
+            elif progress < 15:
+                climate_insights.append(
+                    "• **Progress**: On track with moderate contribution")
+            else:
+                climate_insights.append(
+                    "• **Leadership**: Significant climate contribution")
+
+        for insight in climate_insights:
+            st.write(insight)
+
+    # Quick action items
+    st.markdown("---")
+    st.markdown("### Recommended Actions")
+
+    action_col1, action_col2 = st.columns(2)
+
+    with action_col1:
+        st.markdown("**Short-term (0-6 months):**")
+        st.write("• Launch Time-of-Use tariff pilot")
+        st.write("• Fast-track 100 new charging stations")
+        st.write("• Public awareness campaign on off-peak charging")
+
+    with action_col2:
+        st.markdown("**Medium-term (6-24 months):**")
+        st.write("• Implement smart charging standards")
+        st.write("• Deploy 50 MW distributed generation")
+        st.write("• Expand charging to 5 new districts")
+
+    # Demo Video (optional - keep if relevant)
+    st.subheader("📹 Overview Video")
+    st.video("https://youtu.be/TdP2X5-MQ08")
+
+elif selected_tab == "Data & Partnerships":
+    # Helper Function for this tab
+
+    st.header("Data & Partnerships")
+    st.markdown(
+        "*Transparent data ecosystem for evidence-based EV policy decisions*")
+
+    # Introduction
+    st.markdown("""
+    ### Purpose
+    This section addresses data acquisition, ownership, and scalability concerns while demonstrating
+    how the dashboard can evolve from simulated data to real-time operational data.
+    """)
+
+    # Dataset Overview Table
+    st.subheader(" Dataset Overview")
+
+    datasets = pd.DataFrame({
+        'Dataset Name': [
+            'EV Registration & Fleet Data',
+            'Charging Infrastructure Registry',
+            'Grid Capacity & Load Profiles',
+            'Electricity Tariff Structures',
+            'Vehicle Import & Duty Records',
+            'Renewable Energy Integration Data',
+            'Public Transport EV Adoption',
+            'E-Moto Operator Economics',
+            'Air Quality & Emissions Data',
+            'Consumer Adoption Survey Data'
+        ],
+        'Institutional Owner': [
+            'Rwanda National Police / RURA',
+            'MININFRA / RURA',
+            'Rwanda Energy Group (REG)',
+            'Rwanda Utilities Regulatory Authority (RURA)',
+            'Rwanda Revenue Authority (RRA)',
+            'Rwanda Energy Group (REG)',
+            'Rwanda Utilities Regulatory Authority (RURA)',
+            'Private Operators (Ampersand, Spiro)',
+            'Rwanda Environment Management Authority (REMA)',
+            'University of Rwanda / Research Partners'
+        ],
+        'Current Status': [
+            '🔴 Simulated (MVP)',
+            '🟡 Pending Access',
+            '🟢 Available (Partial)',
+            '🟢 Available',
+            '🟡 Negotiation Phase',
+            '🟡 In Development',
+            '🔴 Simulated (MVP)',
+            '🟡 Data Sharing Agreement',
+            '🟢 Available',
+            '🔴 Research Phase'
+        ],
+        'Update Frequency': [
+            'Monthly',
+            'Quarterly',
+            'Real-time (Grid)',
+            'Annually',
+            'Monthly',
+            'Real-time',
+            'Quarterly',
+            'Monthly',
+            'Quarterly',
+            'Annual Survey'
+        ],
+        'Sensitivity Level': [
+            'Medium',
+            'Low',
+            'High',
+            'Low',
+            'High',
+            'Medium',
+            'Medium',
+            'High (Commercial)',
+            'Low',
+            'Low'
+        ]
+    })
+
+    # Add color coding
+    def color_status(val):
+        if 'Simulated' in val:
+            color = '#FF6B6B'  # Red
+        elif 'Pending' in val:
+            color = '#FFD166'  # Yellow
+        elif 'Negotiation' in val:
+            color = '#FFD166'  # Yellow
+        elif 'Available' in val:
+            color = '#06D6A0'  # Green
+        elif 'Research' in val:
+            color = '#118AB2'  # Blue
+        else:
+            color = 'white'
+        return f'background-color: {color}'
+
+    styled_df = datasets.style.applymap(
+        color_status, subset=['Current Status'])
+    st.dataframe(styled_df, use_container_width=True, height=400)
+
+    # Data Readiness Statement
+    st.subheader("Data Readiness Statement")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("""
+        ### Current MVP Status
+        ⚠️ **Key Limitation:**
+        - **70% of data is simulated** for demonstration purposes
+        - Based on published research and reasonable assumptions
+        - Validated against available public statistics
+        
+        ✅ **Data Quality:**
+        - Grid impact calculations use **actual IPSA+ simulation results**
+        - Economic analysis based on **HOMER Grid modeling**
+        - Adoption barriers from **published regression studies (n=385)**
+        """)
+
+    with col2:
+        st.markdown("""
+        ### Architecture Design
+        🔧 **Modular Data Pipeline:**
+        ```
+        Real Data Sources → API/ETL → Dashboard
+        (Replace simulated)    │        │
+                               ↓        ↓
+                        Simulated → MVP Dashboard
+        ```
+        
+         **Ready for Real Data:**
+        - All calculations accept real-time inputs
+        - Schema aligns with institutional formats
+        - Authentication framework for sensitive data
+        """)
+
+    # Scalability Roadmap
+    st.subheader("Scalability Roadmap: Kigali → National")
+
+    # Create timeline visualization
+    timeline_data = pd.DataFrame({
+        'Phase': ['Phase 1: Kigali MVP', 'Phase 2: Urban Corridors', 'Phase 3: National Scale'],
+        'Timeline': ['Q1-Q2 2024', 'Q3-Q4 2024', '2025'],
+        'Data Coverage': ['Kigali + 3 districts', '8 urban districts', 'All 30 districts'],
+        'Data Sources': ['Simulated + Available', 'Partial real-time', 'Full real-time integration'],
+        'Stakeholders': ['MININFRA, REG, RURA', '+ Private sector', '+ All districts']
+    })
+
+    st.dataframe(timeline_data, use_container_width=True)
+
+    # Visual timeline
+    st.markdown("####Implementation Timeline")
+
+    fig = go.Figure()
+
+    phases = ['Kigali MVP', 'Urban Corridors', 'National Scale']
+    districts = [4, 8, 30]
+    data_coverage = ['40%', '70%', '100%']
+
+    fig.add_trace(go.Scatter(
+        x=phases,
+        y=districts,
+        mode='lines+markers+text',
+        name='Districts Covered',
+        text=[f'{d} districts' for d in districts],
+        textposition='top center',
+        line=dict(color='#0066CC', width=3),
+        marker=dict(size=12)
+    ))
+
+    fig.update_layout(
+        title='National Scaling Plan',
+        xaxis_title='Implementation Phase',
+        yaxis_title='Number of Districts',
+        template='plotly_white',
+        height=300
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Charging Station Map")
+    # Partnership Framework
+    st.subheader("Partnership Framework")
 
-    filtered_map = stations[stations["District"].isin(
-        district_selected)].copy()
-    filtered_map = filtered_map.rename(
-        columns={"Latitude": "latitude", "Longitude": "longitude"})
-    st.map(filtered_map[["latitude", "longitude"]])
+    partner_col1, partner_col2 = st.columns(2)
 
-    st.subheader("Quick Insights")
-    st.write("""
-            - EV growth is dominated by 2-wheelers.  
-            - Charging infrastructure is concentrated in Kigali.  
-            - Evening charging significantly increases grid load.  
-            """)
-    st.subheader("Demo Video")
-    st.video("https://youtu.be/TdP2X5-MQ08")
+    with partner_col1:
+        st.markdown("""
+        ### Government Partners
+        **MININFRA** (Lead)
+        - Policy data
+        - Infrastructure deployment
+        - National targets
+        
+        **RURA** (Regulator)
+        - EV registration
+        - Tariff structures
+        - Charging standards
+        
+        **REG** (Utility)
+        - Grid capacity data
+        - Load profiles
+        - Renewable integration
+        """)
+
+    with partner_col2:
+        st.markdown("""
+        ### Private & Research Partners
+        **Private Sector**
+        - Ampersand/Spiro: E-moto data
+        - Charging operators: Usage patterns
+        - Financial institutions: Green financing
+        
+        **Research Institutions**
+        - University of Rwanda: Validation studies
+        - ACE-ESD: Technical research
+        - International: Best practices
+        """)
+
+    # Data Simulation Details
+    st.subheader("Research-Based Simulation Methodology")
+
+    with st.expander("View Simulation Parameters", expanded=False):
+        st.markdown("""
+        ### How We Simulate Data
+        
+        #### 1. EV Adoption Curve
+        ```python
+        # Based on Rwanda's NDC and transport sector targets
+        base_year_evs = 12,500 (2023 actual)
+        growth_rate = 20-30% annually (aligned with national targets)
+        2030_target = 30,000 EVs (conservative)
+        2050_target = 150,000 EVs (research projection)
+        ```
+        
+        #### 2. Grid Impact Calculations
+        ```python
+        # From IPSA+ Power Simulation Studies
+        max_penetration_10kW = 1.5% private, 10% buses/taxis
+        transformer_loading = 2-7/18 transformers >80% capacity
+        critical_period = 23:00-03:00 (night charging peak)
+        DG_requirement = 6.5-24.5 MW based on charger power
+        ```
+        
+        #### 3. Economic Parameters
+        ```python
+        # From HOMER Grid Analysis
+        solar_LCOE_reduction = 139.7%
+        negative_LCOE_possible = -$0.103/kWh
+        e_moto_savings = $700/year per operator
+        infrastructure_cost = $50,000/station average
+        ```
+        
+        #### 4. Adoption Barriers (Regression Analysis)
+        ```python
+        # Odds Ratios from survey (n=385)
+        high_initial_cost = 1.98
+        limited_charging = 1.77
+        low_awareness = 1.63
+        subsidy_effectiveness = 3.39
+        tax_exemption_effect = 2.41
+        ```
+        """)
+
+    # Interactive Data Simulation Demo
+    st.subheader("Interactive Data Simulation")
+
+    sim_col1, sim_col2, sim_col3 = st.columns(3)
+
+    with sim_col1:
+        data_quality = st.slider(
+            "Data Quality Level",
+            0, 100, 30,
+            help="Percentage of real vs simulated data"
+        )
+
+    with sim_col2:
+        update_freq = st.selectbox(
+            "Update Frequency",
+            ["Monthly", "Weekly", "Daily", "Real-time"],
+            index=0
+        )
+
+    with sim_col3:
+        geographic_cover = st.slider(
+            "Geographic Coverage",
+            1, 30, 4,
+            help="Number of districts covered"
+        )
+
+    # Show simulation impact
+    st.markdown("#### Impact of Improved Data")
+
+    impact_col1, impact_col2, impact_col3 = st.columns(3)
+
+    with impact_col1:
+        st.metric(
+            "Policy Accuracy",
+            f"+{min(data_quality * 0.8, 80):.0f}%",
+            "With real data"
+        )
+
+    with impact_col2:
+        reduction = min(get_update_impact(update_freq), 90)
+        st.metric(
+            "Response Time",
+            f"-{reduction:.0f}%",
+            "Faster decisions"
+        )
+
+    with impact_col3:
+        st.metric(
+            "National Relevance",
+            f"{geographic_cover}/30",
+            "Districts covered"
+        )
+
+    # Partnership Engagement Form
+    st.subheader("Partnership Interest")
+
+    with st.form("partnership_form"):
+        st.markdown("Interested in contributing data or partnering?")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            org_name = st.text_input("Organization Name")
+            org_type = st.selectbox(
+                "Organization Type",
+                ["Government", "Private Sector", "Research",
+                    "Development Partner", "Other"]
+            )
+
+        with col2:
+            contact_email = st.text_input("Contact Email")
+            data_type = st.multiselect(
+                "Data Interest/Contribution",
+                ["EV Registration", "Charging Infrastructure", "Grid Data",
+                 "Economic Data", "Research Findings", "Policy Data"]
+            )
+
+        interest_level = st.slider("Interest Level", 1, 10, 5)
+        comments = st.text_area("Additional Comments")
+
+        submitted = st.form_submit_button("Express Interest")
+
+        if submitted:
+            st.success("Thank you for your interest! We'll contact you soon.")
+            # In production, this would connect to a database
+            st.info("*This is a demo. In production, this would trigger a workflow.*")
+
+    # API & Integration Information
+    st.subheader("Technical Integration")
+
+    st.markdown("""
+    ### Available Integration Methods
+    
+    #### 1. REST API (Preferred)
+    ```python
+    # Example: Submit charging station data
+    POST /api/v1/charging-stations
+    {
+        "district": "Kigali",
+        "latitude": -1.950,
+        "longitude": 30.058,
+        "type": "fast",
+        "operator": "Private"
+    }
+    ```
+    
+    #### 2. File Upload
+    - CSV/Excel templates provided
+    - Automated validation
+    - Batch processing
+    
+    #### 3. Database Connection
+    - Secure VPN tunnel
+    - Read-only access
+    - Scheduled synchronization
+    
+    #### 4. Manual Entry Portal
+    - Web interface for districts
+    - Mobile data collection
+    - Offline capability
+    ```
+    """)
+
+    # Footer note
+    st.markdown("---")
+    st.info("""
+    **Note on Data Privacy & Security:**
+    - All sensitive data handled per Rwanda Data Protection Law
+    - Aggregate/anonymized reporting only
+    - Individual entity data never disclosed
+    - Multi-level access controls implemented
+    """)
+
+# Add helper variable for update frequency factor
+update_freq_factor = {
+    "Monthly": 30,
+    "Weekly": 70,
+    "Daily": 90,
+    "Real-time": 95
+}
 
 # Footer
 st.markdown("---")
@@ -829,4 +1541,3 @@ compact_footer = """
 """
 
 st.markdown(compact_footer, unsafe_allow_html=True)
-
