@@ -1532,7 +1532,7 @@ compact_footer = """
     • <strong>Version:</strong> 3.1 
     • <strong>Updated:</strong> December 2025 
     • <strong>Contact:</strong> 
-      <a href="mailto:mutua@ndunda.com" style="color: #555; text-decoration: none;">mutua@ndunda.com</a>
+      <a href="mailto:mutua@ndunda.com" style="color: #555; text-decoration: none;">cndamus@gmail.com</a>
     <style>
         div a { color: #555 !important; }
         div a:hover { text-decoration: underline !important; color: #0066cc !important; }
